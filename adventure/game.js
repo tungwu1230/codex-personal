@@ -1,0 +1,8 @@
+const key='starlight-adventure-v1';
+let state={node:'start',trust:0,items:['銀色羅盤']};
+try {const saved=JSON.parse(localStorage.getItem(key));if(saved && STORY[saved.node] && Array.isArray(saved.items) && Number.isFinite(saved.trust)) state=saved;} catch(e) {}
+const $=id=>document.getElementById(id);
+function render(){const node=STORY[state.node];$('location').textContent=node.location;$('chapter').textContent=node.chapter;$('title').textContent=node.title;$('text').replaceChildren(...node.text.map(t=>{const p=document.createElement('p');p.textContent=t;return p}));$('trust').textContent=state.trust+'/ 2';$('meter').style.width=(state.trust/2*100)+'%';$('inventory').replaceChildren(...state.items.map(item=>{const li=document.createElement('li');li.textContent=item;return li}));const choices=node.choices||[{label:'再次踏上旅程',restart:true}];$('choices').replaceChildren(...choices.map((choice,i)=>{const b=document.createElement('button');b.className='choice';const n=document.createElement('span');n.textContent=String(i+1).padStart(2,'0');b.append(n,document.createTextNode(choice.label));b.onclick=()=>{if(choice.restart){reset();return}if(choice.item&&!state.items.includes(choice.item))state.items.push(choice.item);state.trust+=choice.trust||0;state.node=choice.next;save();render();$('title').focus({preventScroll:true});document.querySelector('.story-body').scrollIntoView({behavior:'smooth',block:'start'})};return b}));$('title').tabIndex=-1;save()}
+function save(){try{localStorage.setItem(key,JSON.stringify(state))}catch(e){}}
+function reset(){state={node:'start',trust:0,items:['銀色羅盤']};save();render()}
+$('restart').onclick=()=>{if(confirm('確定要重新開始嗎？目前的旅程進度將被清除。'))reset()};render();
