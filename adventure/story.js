@@ -1,24 +1,210 @@
-// 故事內容與選項集中在這裡，方便修改。選項的 next 對應下一個段落。
-// 選項欄位：item 取得道具、trust 增加信任、requires 解鎖條件
-//   requires: { items:[全部需要], anyItem:[任一即可], trust:最低信任 }，lockHint 為未解鎖時的提示
-// 段落欄位：puzzle 謎題（解開前顯示 giveUp 選項，解開後顯示 solvedText 與 choices）
+// 故事內容集中在這裡，方便修改。
+//
+// 段落欄位
+//   bg        背景圖，對應 assets/<bg>.webp；圖片不存在時使用 assets/starlight.png
+//   lines     逐句演出的台詞。字串是旁白；物件 { who, face, text } 是角色對白
+//             who 為說話者名稱（需在 CHARACTERS 中才會顯示立繪），face 為表情
+//             sprite 可指定立繪（例如 'deer-hurt'），sprite:null 收起立繪
+//   choices   選項：next 下一段、item 取得道具、trust 增加信任
+//             requires: { items:[全部需要], anyItem:[任一即可], trust:最低信任 }，lockHint 為未解鎖時的提示
+//   puzzle    謎題。lines 播完後出現；解開前顯示 giveUp 選項，解開後播放 solvedLines 再顯示 choices
+//   ending    結局段落
+
+// 角色：id 對應 assets/char/<id>-<face>.webp
+const CHARACTERS = {
+  '小葵': { id: 'aoi', face: 'normal' },
+  '弟弟': { id: 'brother', face: 'scared' },
+  '守林人': { id: 'ranger', face: 'normal' },
+  '白鹿': { id: 'deer', face: 'stand' },
+  '國王': { id: 'king', face: 'memory' }
+};
+
+// 道具：圖示對應 assets/items/<icon>.webp
+const ITEMS = {
+  '銀色羅盤': 'compass',
+  '銀色碎片': 'shard',
+  '微光提燈': 'lantern',
+  '光葉結晶': 'leaf',
+  '封印的秘密': 'seal-secret'
+};
+
 const STORY = {
- start:{location:'星落荒原',chapter:'PROLOGUE / 甦醒',title:'沒有星星的夜晚',text:['你在柔軟的草地上醒來。夜空深得像一口井，卻沒有一顆星星。','手中握著一枚銀色羅盤。指針不指向北方，而是微微顫動，指向遠方森林。羅盤背面刻著一行字：「願光找到願意傾聽的人。」','遠處傳來鐘聲，近處則有一點微弱的燈火。你整理好行囊，踏出第一步。'],choices:[{label:'循著燈火前往村莊',next:'village'},{label:'跟隨羅盤走向古老森林',next:'forest'},{label:'先調查荒原上的石碑',next:'stone'}]},
- stone:{location:'星落荒原',chapter:'CHAPTER 01 / 石碑',title:'刻在石上的願望',text:['石碑半埋在草叢中，上頭的文字已經模糊：「星光並非王冠之物，而是眾人的願望。」','碑旁有一片銀色碎片，當你靠近，它與羅盤輕輕共鳴。你將它收進行囊。'],choices:[{label:'帶著碎片前往村莊',next:'village',item:'銀色碎片'},{label:'帶著碎片走向森林',next:'forest',item:'銀色碎片'}]},
- village:{location:'微燈村',chapter:'CHAPTER 01 / 微燈',title:'守燈人的請求',text:['村子的窗邊都掛著空燈籠。年輕的守燈人小葵正試著點亮最後一盞燈，火苗卻一次次熄滅。','「以前星光會替迷路的人照路。」她抬頭看你，「森林裡的守林人知道更多。但我的弟弟還沒回來，我不能離開。」','村口有一條通往溪流的小徑；羅盤則指向森林深處。'],choices:[{label:'先去溪邊尋找小葵的弟弟',next:'brook'},{label:'收下消息，直接前往森林',next:'forest'}]},
- brook:{location:'月影溪',chapter:'CHAPTER 02 / 相逢',title:'溪邊的小小勇氣',text:['你沿著溪流找到一個抱著空燈籠的孩子。他想替姊姊找回星光，卻在霧裡迷了路。','你陪他回到村裡。小葵鬆了一口氣，將一盞微微發亮的提燈交給你。','「這是我們最後的火種。請讓它陪你走一段路。」'],choices:[{label:'帶著提燈走進森林',next:'forest',trust:1,item:'微光提燈'}]},
- forest:{location:'低語之森',chapter:'CHAPTER 02 / 森林',title:'樹木記得的事',text:['森林靜得能聽見葉子翻身。一位披著青苔斗篷的守林人坐在倒木上，正替受傷的白鹿包紮。','「王國以為星光是寶物，將它封進了王冠。」他說，「可星光來自每個人的願望。它被佔有得越久，天空就越暗。」','通往星之殿的路被荊棘阻擋。守林人望向白鹿，又望向你手中的羅盤。'],choices:[{label:'留下來幫忙照顧白鹿',next:'deer'},{label:'請守林人指出繞過荊棘的路',next:'ruins'}]},
- deer:{location:'低語之森',chapter:'CHAPTER 03 / 同行',title:'白鹿的贈禮',text:['你以溪水清洗傷口，又耐心地等白鹿平靜下來。天色始終昏暗，你們卻在沉默中找到一種安定。','白鹿站起身，輕觸你的手心。一片葉形的光落在那裡，化作透明的結晶。','守林人微笑：「它會在你猶豫的時候，提醒你聽見別人的願望。」'],choices:[{label:'收下光葉，前往星之殿',next:'ruins',trust:1,item:'光葉結晶'}]},
- ruins:{location:'星之殿遺跡',chapter:'CHAPTER 03 / 真相',title:'王冠與空座',text:['星之殿藏在盤根錯節的樹根之下。石門上的凹槽與你的羅盤恰好相合。','門後，一頂破損的王冠懸浮在空座之上。無數細小的光在其中流動，像一整座城市不曾說出口的夢。','牆上的壁畫描繪了真相：很久以前，國王為了保護王國，收集了所有人的星光，卻忘了問他們是否願意。','羅盤的指針停了下來。你終於明白，它尋找的不是寶藏，而是一個願意作出選擇的人。'],choices:[{label:'靠近王冠，傾聽光中的聲音',next:'voices'},{label:'舉起光源，查看壁畫上的封印',next:'seal',requires:{anyItem:['微光提燈','光葉結晶']},lockHint:'壁畫隱沒在黑暗中，需要一點光'}]},
- seal:{location:'星之殿遺跡',chapter:'CHAPTER 04 / 封印',title:'被打亂的壁畫',text:['光照亮牆面，你才發現壁畫由四塊石板拼成。石板曾被人取下又胡亂放回，故事因此斷成了碎片。','若能把石板排回原本的順序，也許就能讀懂封印的意義。'],
-  puzzle:{id:'mural',type:'order',prompt:'點選兩塊石板交換位置，把壁畫的故事排回正確順序。',hintItem:'銀色碎片',hintLabel:'讓銀色碎片與壁畫共鳴',hintText:'碎片微微發燙，第一塊石板亮了起來。',
-   pieces:[{id:'wish',text:'眾人在星空下各自許願，星光從每一扇窗升起'},{id:'fear',text:'黑暗從邊境蔓延，國王在城牆上徹夜不眠'},{id:'crown',text:'國王收集了所有星光，封進一頂王冠'},{id:'dark',text:'天空熄滅，再也沒有人抬頭'}],
-   start:['crown','wish','dark','fear']},
-  solvedText:['最後一塊石板歸位時，縫隙間滲出淡淡的光。壁畫邊緣浮現一段文字：「光可以被歸還，也可以被守護。但若要照亮每一個角落，必須有人願意分享自己的光。」','你將這句話記在心裡，走向王冠。'],
-  giveUp:[{label:'放棄解讀，直接走向王冠',next:'voices'}],
-  choices:[{label:'傾聽光中的聲音',next:'voices',item:'封印的秘密'}]},
- voices:{location:'星之殿',chapter:'FINAL CHAPTER / 抉擇',title:'光應該屬於誰？',text:['當你伸出手，王冠中的光輕輕震顫。你聽見孩子想讓姊姊微笑，守林人希望森林安眠，也聽見國王曾經害怕失去一切。','你可以打破王冠，讓星光回到原本的主人；也可以保留封印，以王冠的力量照亮王國。','而羅盤在你掌心發暖，似乎還有另一個選擇：分享自己的一部分光，讓星光成為所有人都能共同守護的天空。'],choices:[{label:'打破王冠，將星光歸還眾人',next:'ending_return'},{label:'保留王冠，守護王國的光',next:'ending_crown'},{label:'分享自己的光，點亮共同的天空',next:'ending_share',requires:{items:['光葉結晶','封印的秘密'],trust:2},lockHint:'你還不夠了解這片土地與封印的真相'}]},
- ending_return:{location:'星光重臨',chapter:'ENDING 01 / 歸還',title:'每個人的星星',text:['王冠在你掌中化為無數光點。它們飛越森林與屋頂，回到每個人的窗前。','有人許願，有人想念，也有人只是靜靜抬頭。夜空漸漸亮起，星星的形狀與從前不同，卻更加溫柔。','羅盤不再轉動。你知道，這不是終點，而是無數段旅程的開始。'],ending:true},
- ending_crown:{location:'星之殿',chapter:'ENDING 02 / 守望',title:'長夜中的守望者',text:['你重新穩固封印，王冠的光化為一道溫暖的光環，照亮了沉睡的王國。','村莊不再害怕黑暗，旅人也能看清歸途。但你仍記得那些被留在王冠裡的願望。','於是你留在星之殿，等待下一位能找到更好答案的旅人。'],ending:true},
- ending_share:{location:'群星之下',chapter:'TRUE ENDING / 共光',title:'我們共同的天空',text:['你將羅盤貼近胸口，把自己的一點光交給夜空。王冠沒有破碎，而是化作一座橋，連接每個人的願望。','星光灑落時，你聽見遠方的笑聲。它不再屬於任何一頂王冠，而由所有願意抬頭的人共同守護。','你的旅程還會繼續。從今以後，無論走到哪裡，天空都記得你的名字。'],ending:true}
+  start: {
+    location: '星落荒原', chapter: 'PROLOGUE / 甦醒', title: '沒有星星的夜晚', bg: 'bg/wasteland',
+    lines: [
+      '你在柔軟的草地上醒來。',
+      '夜空深得像一口井，卻沒有一顆星星。',
+      '手中握著一枚銀色羅盤。指針不指向北方，而是微微顫動，指向遠方森林。',
+      '羅盤背面刻著一行字：「願光找到願意傾聽的人。」',
+      '遠處傳來鐘聲，近處則有一點微弱的燈火。你整理好行囊，踏出第一步。'
+    ],
+    choices: [
+      { label: '循著燈火前往村莊', next: 'village' },
+      { label: '跟隨羅盤走向古老森林', next: 'forest' },
+      { label: '先調查荒原上的石碑', next: 'stone' }
+    ]
+  },
+
+  stone: {
+    location: '星落荒原', chapter: 'CHAPTER 01 / 石碑', title: '刻在石上的願望', bg: 'bg/stone',
+    lines: [
+      '石碑半埋在草叢中，上頭的文字已經模糊。',
+      '你用指尖描過刻痕，勉強讀出一句：「星光並非王冠之物，而是眾人的願望。」',
+      '碑旁有一片銀色碎片。當你靠近，它與羅盤輕輕共鳴。',
+      '你將它收進行囊。'
+    ],
+    choices: [
+      { label: '帶著碎片前往村莊', next: 'village', item: '銀色碎片' },
+      { label: '帶著碎片走向森林', next: 'forest', item: '銀色碎片' }
+    ]
+  },
+
+  village: {
+    location: '微燈村', chapter: 'CHAPTER 01 / 微燈', title: '守燈人的請求', bg: 'bg/village',
+    lines: [
+      '村子的窗邊都掛著空燈籠。',
+      '年輕的守燈人正試著點亮最後一盞燈，火苗卻一次次熄滅。',
+      { who: '小葵', face: 'normal', text: '……又熄了。啊，你是旅人嗎？我叫小葵，是這裡的守燈人。' },
+      { who: '小葵', face: 'normal', text: '以前星光會替迷路的人照路。現在，連燈火都留不住了。' },
+      { who: '小葵', face: 'worried', text: '森林裡的守林人知道更多。可是我弟弟去溪邊還沒回來，我不能離開。' },
+      '村口有一條通往溪流的小徑；羅盤則指向森林深處。'
+    ],
+    choices: [
+      { label: '先去溪邊尋找小葵的弟弟', next: 'brook' },
+      { label: '收下消息，直接前往森林', next: 'forest' }
+    ]
+  },
+
+  brook: {
+    location: '月影溪', chapter: 'CHAPTER 02 / 相逢', title: '溪邊的小小勇氣', bg: 'bg/brook',
+    lines: [
+      '霧氣沿著溪面流動。你在岸邊找到一個抱著空燈籠的孩子。',
+      { who: '弟弟', face: 'scared', text: '你、你是誰？……我想替姊姊找回星光，可是霧好濃，我找不到回去的路。' },
+      '你牽起他的手，循著羅盤的微光走回村裡。',
+      { who: '小葵', face: 'smile', text: '太好了……謝謝你。' },
+      { who: '小葵', face: 'normal', text: '這是我們最後的火種。請讓它陪你走一段路。' },
+      '她將一盞微微發亮的提燈交到你手中。'
+    ],
+    choices: [
+      { label: '帶著提燈走進森林', next: 'forest', trust: 1, item: '微光提燈' }
+    ]
+  },
+
+  forest: {
+    location: '低語之森', chapter: 'CHAPTER 02 / 森林', title: '樹木記得的事', bg: 'bg/forest',
+    lines: [
+      '森林靜得能聽見葉子翻身。',
+      { sprite: 'deer-hurt', text: '一位披著青苔斗篷的守林人坐在倒木上，正替受傷的白鹿包紮。' },
+      { who: '守林人', face: 'serious', text: '王國以為星光是寶物，將它封進了王冠。' },
+      { who: '守林人', face: 'serious', text: '可星光來自每個人的願望。它被佔有得越久，天空就越暗。' },
+      '通往星之殿的路被荊棘阻擋。守林人望向白鹿，又望向你手中的羅盤。'
+    ],
+    choices: [
+      { label: '留下來幫忙照顧白鹿', next: 'deer' },
+      { label: '請守林人指出繞過荊棘的路', next: 'ruins' }
+    ]
+  },
+
+  deer: {
+    location: '低語之森', chapter: 'CHAPTER 03 / 同行', title: '白鹿的贈禮', bg: 'bg/forest',
+    lines: [
+      { sprite: 'deer-hurt', text: '你以溪水清洗傷口，又耐心地等白鹿平靜下來。' },
+      '天色始終昏暗，你們卻在沉默中找到一種安定。',
+      { sprite: 'deer-stand', text: '白鹿站起身，輕觸你的手心。一片葉形的光落在那裡，化作透明的結晶。' },
+      { who: '守林人', face: 'smile', text: '它會在你猶豫的時候，提醒你聽見別人的願望。' }
+    ],
+    choices: [
+      { label: '收下光葉，前往星之殿', next: 'ruins', trust: 1, item: '光葉結晶' }
+    ]
+  },
+
+  ruins: {
+    location: '星之殿遺跡', chapter: 'CHAPTER 03 / 真相', title: '王冠與空座', bg: 'bg/ruins',
+    lines: [
+      '星之殿藏在盤根錯節的樹根之下。石門上的凹槽與你的羅盤恰好相合。',
+      { bg: 'bg/hall', text: '門後，一頂破損的王冠懸浮在空座之上。' },
+      '無數細小的光在其中流動，像一整座城市不曾說出口的夢。',
+      '牆上的壁畫隱約描繪著一位國王。很久以前，他為了保護王國，收集了所有人的星光——卻忘了問他們是否願意。',
+      '羅盤的指針停了下來。你終於明白，它尋找的不是寶藏，而是一個願意作出選擇的人。'
+    ],
+    choices: [
+      { label: '靠近王冠，傾聽光中的聲音', next: 'voices' },
+      { label: '舉起光源，查看壁畫上的封印', next: 'seal', requires: { anyItem: ['微光提燈', '光葉結晶'] }, lockHint: '壁畫隱沒在黑暗中，需要一點光' }
+    ]
+  },
+
+  seal: {
+    location: '星之殿遺跡', chapter: 'CHAPTER 04 / 封印', title: '被打亂的壁畫', bg: 'bg/hall',
+    lines: [
+      '光照亮牆面，你才發現壁畫由四塊石板拼成。',
+      '石板曾被人取下又胡亂放回，故事因此斷成了碎片。',
+      '若能把石板排回原本的順序，也許就能讀懂封印的意義。'
+    ],
+    puzzle: {
+      id: 'mural', type: 'order',
+      prompt: '點選兩塊石板交換位置，把壁畫的故事排回正確順序。',
+      hintItem: '銀色碎片', hintLabel: '讓銀色碎片與壁畫共鳴', hintText: '碎片微微發燙，第一塊石板亮了起來。',
+      // image 對應 assets/<image>.webp
+      pieces: [
+        { id: 'wish', image: 'mural/wish', text: '眾人在星空下各自許願，星光從每一扇窗升起' },
+        { id: 'fear', image: 'mural/fear', text: '黑暗從邊境蔓延，國王在城牆上徹夜不眠' },
+        { id: 'crown', image: 'mural/crown', text: '國王收集了所有星光，封進一頂王冠' },
+        { id: 'dark', image: 'mural/dark', text: '天空熄滅，再也沒有人抬頭' }
+      ],
+      start: ['crown', 'wish', 'dark', 'fear']
+    },
+    solvedLines: [
+      '最後一塊石板歸位時，縫隙間滲出淡淡的光。',
+      { who: '國王', face: 'memory', text: '我只是……害怕失去這一切。' },
+      { sprite: null, text: '壁畫邊緣浮現一段文字：「光可以被歸還，也可以被守護。但若要照亮每一個角落，必須有人願意分享自己的光。」' },
+      '你將這句話記在心裡，走向王冠。'
+    ],
+    giveUp: [{ label: '放棄解讀，直接走向王冠', next: 'voices' }],
+    choices: [{ label: '傾聽光中的聲音', next: 'voices', item: '封印的秘密' }]
+  },
+
+  voices: {
+    location: '星之殿', chapter: 'FINAL CHAPTER / 抉擇', title: '光應該屬於誰？', bg: 'bg/hall',
+    lines: [
+      '當你伸出手，王冠中的光輕輕震顫。',
+      '你聽見孩子想讓姊姊微笑，守林人希望森林安眠，也聽見國王曾經害怕失去一切。',
+      '你可以打破王冠，讓星光回到原本的主人；也可以保留封印，以王冠的力量照亮王國。',
+      '而羅盤在你掌心發暖，似乎還有另一個選擇：分享自己的一部分光，讓星光成為所有人都能共同守護的天空。'
+    ],
+    choices: [
+      { label: '打破王冠，將星光歸還眾人', next: 'ending_return' },
+      { label: '保留王冠，守護王國的光', next: 'ending_crown' },
+      { label: '分享自己的光，點亮共同的天空', next: 'ending_share', requires: { items: ['光葉結晶', '封印的秘密'], trust: 2 }, lockHint: '你還不夠了解這片土地與封印的真相' }
+    ]
+  },
+
+  ending_return: {
+    location: '星光重臨', chapter: 'ENDING 01 / 歸還', title: '每個人的星星', bg: 'cg/ending-return', ending: true,
+    lines: [
+      '王冠在你掌中化為無數光點。它們飛越森林與屋頂，回到每個人的窗前。',
+      '有人許願，有人想念，也有人只是靜靜抬頭。',
+      '夜空漸漸亮起，星星的形狀與從前不同，卻更加溫柔。',
+      '羅盤不再轉動。你知道，這不是終點，而是無數段旅程的開始。'
+    ]
+  },
+
+  ending_crown: {
+    location: '星之殿', chapter: 'ENDING 02 / 守望', title: '長夜中的守望者', bg: 'cg/ending-crown', ending: true,
+    lines: [
+      '你重新穩固封印，王冠的光化為一道溫暖的光環，照亮了沉睡的王國。',
+      '村莊不再害怕黑暗，旅人也能看清歸途。',
+      '但你仍記得那些被留在王冠裡的願望。',
+      '於是你留在星之殿，等待下一位能找到更好答案的旅人。'
+    ]
+  },
+
+  ending_share: {
+    location: '群星之下', chapter: 'TRUE ENDING / 共光', title: '我們共同的天空', bg: 'cg/ending-share', ending: true,
+    lines: [
+      '你將羅盤貼近胸口，把自己的一點光交給夜空。',
+      '王冠沒有破碎，而是化作一座橋，連接每個人的願望。',
+      '星光灑落時，你聽見遠方的笑聲。它不再屬於任何一頂王冠，而由所有願意抬頭的人共同守護。',
+      '你的旅程還會繼續。從今以後，無論走到哪裡，天空都記得你的名字。'
+    ]
+  }
 };

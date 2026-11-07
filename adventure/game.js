@@ -1,25 +1,116 @@
-const SAVE_KEY = 'starlight-adventure-v2';
+const SAVE_KEY = 'starlight-adventure-v3';
 const MAX_TRUST = 2;
+const MAX_LOG = 300;
+const TYPE_SPEED = 32; // 每個字的毫秒數
+const FALLBACK_BG = '../assets/starlight.png';
+const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const $ = id => document.getElementById(id);
+const asset = path => `../assets/${path}.webp`;
 
+// ---- 狀態與存檔 ----
 function newState() {
-  return { node: 'start', trust: 0, items: ['銀色羅盤'], solved: [], puzzles: {} };
+  return { node: 'start', line: 0, trust: 0, items: ['銀色羅盤'], solved: [], puzzles: {}, log: [] };
 }
 
 function loadState() {
   try {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY));
-    if (s && STORY[s.node] && Array.isArray(s.items) && Number.isFinite(s.trust) &&
-        Array.isArray(s.solved) && s.puzzles && typeof s.puzzles === 'object') return s;
+    if (s && STORY[s.node] && Number.isInteger(s.line) && Array.isArray(s.items) &&
+        Number.isFinite(s.trust) && Array.isArray(s.solved) && Array.isArray(s.log) &&
+        s.puzzles && typeof s.puzzles === 'object') {
+      s.line = Math.min(Math.max(0, s.line), sequence(STORY[s.node], s).length - 1);
+      return s;
+    }
   } catch (e) {}
-  return newState();
+  const s = newState();
+  logLine(s);
+  return s;
 }
-
-let state = loadState();
-let selectedPiece = null;
 
 function save() {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (e) {}
+}
+
+let state;
+let typing = null; // { timer, text }
+let selectedPiece = null;
+
+// ---- 台詞 ----
+function asLine(raw) {
+  return typeof raw === 'string' ? { text: raw } : raw;
+}
+
+function sequence(node, s = state) {
+  const solved = node.puzzle && s.solved.includes(node.puzzle.id);
+  return [...node.lines, ...(solved ? node.solvedLines || [] : [])];
+}
+
+function currentLines() {
+  return sequence(STORY[state.node]);
+}
+
+function atEnd() {
+  return state.line >= currentLines().length - 1;
+}
+
+function logLine(s = state) {
+  const line = asLine(sequence(STORY[s.node], s)[s.line]);
+  s.log.push({ who: line.who || null, text: line.text });
+  if (s.log.length > MAX_LOG) s.log.splice(0, s.log.length - MAX_LOG);
+}
+
+// 從段落開頭累積到目前這句，決定背景與立繪
+function stageAt(node, index) {
+  const lines = sequence(node);
+  let bg = node.bg;
+  let sprite = null;
+  for (let i = 0; i <= index; i++) {
+    const line = asLine(lines[i]);
+    if (line.bg) bg = line.bg;
+    if ('sprite' in line) sprite = line.sprite;
+    else if (line.who && CHARACTERS[line.who]) {
+      const c = CHARACTERS[line.who];
+      sprite = `${c.id}-${line.face || c.face}`;
+    }
+  }
+  return { bg, sprite };
+}
+
+// ---- 圖片（不存在時退回預設） ----
+const imageCache = {};
+function probe(src) {
+  if (!imageCache[src]) {
+    imageCache[src] = new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => resolve(true);
+      img.onerror = () => resolve(false);
+      img.src = src;
+    });
+  }
+  return imageCache[src];
+}
+
+let bgToken = 0;
+function setBackground(bg) {
+  const token = ++bgToken;
+  const src = bg ? asset(bg) : null;
+  (src ? probe(src) : Promise.resolve(false)).then(ok => {
+    if (token !== bgToken) return;
+    $('scene-bg').style.backgroundImage = `url('${ok ? src : FALLBACK_BG}')`;
+  });
+}
+
+let spriteToken = 0;
+function setSprite(name) {
+  const token = ++spriteToken;
+  const img = $('sprite');
+  if (!name) { img.hidden = true; return; }
+  const src = asset(`char/${name}`);
+  probe(src).then(ok => {
+    if (token !== spriteToken) return;
+    if (ok) { if (img.getAttribute('src') !== src) img.src = src; img.hidden = false; }
+    else img.hidden = true;
+  });
 }
 
 function el(tag, className, text) {
@@ -27,6 +118,53 @@ function el(tag, className, text) {
   if (className) e.className = className;
   if (text != null) e.textContent = text;
   return e;
+}
+
+function optionalImage(path, className) {
+  const img = el('img', className);
+  img.alt = '';
+  img.hidden = true;
+  probe(asset(path)).then(ok => { if (ok) { img.src = asset(path); img.hidden = false; } });
+  return img;
+}
+
+// ---- 打字機 ----
+function stopTyping() {
+  if (typing) { clearInterval(typing.timer); $('line').textContent = typing.text; typing = null; }
+}
+
+function typeText(text) {
+  stopTyping();
+  const box = $('line');
+  if (REDUCED_MOTION) { box.textContent = text; return; }
+  let i = 0;
+  box.textContent = '';
+  typing = {
+    text,
+    timer: setInterval(() => {
+      i++;
+      box.textContent = text.slice(0, i);
+      if (i >= text.length) { stopTyping(); renderControls(); }
+    }, TYPE_SPEED)
+  };
+}
+
+// ---- 推進 ----
+function advance() {
+  if (typing) { stopTyping(); renderControls(); return; }
+  if (atEnd()) return;
+  state.line++;
+  logLine();
+  save();
+  renderLine(true);
+}
+
+function skip() {
+  stopTyping();
+  const last = currentLines().length - 1;
+  while (state.line < last) { state.line++; logLine(); }
+  save();
+  renderLine(false);
 }
 
 // ---- 條件 ----
@@ -50,8 +188,7 @@ function requirementText(req) {
 function choiceButton(choice, index) {
   const b = el('button', 'choice');
   b.append(el('span', null, String(index + 1).padStart(2, '0')));
-  const unlocked = meets(choice.requires);
-  if (unlocked) {
+  if (meets(choice.requires)) {
     b.append(document.createTextNode(choice.label));
     b.onclick = () => choose(choice);
   } else {
@@ -67,60 +204,62 @@ function choiceButton(choice, index) {
 
 function choose(choice) {
   if (choice.restart) { reset(); return; }
+  state.log.push({ choice: choice.label });
   if (choice.item && !state.items.includes(choice.item)) state.items.push(choice.item);
   state.trust = Math.min(MAX_TRUST, state.trust + (choice.trust || 0));
   state.node = choice.next;
+  state.line = 0;
   selectedPiece = null;
+  logLine();
   save();
-  render();
-  $('title').focus({ preventScroll: true });
+  render(true);
+  $('dialogue').focus({ preventScroll: true });
   const target = matchMedia('(max-width:800px)').matches ? '.story' : '.story-body';
   document.querySelector(target).scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ---- 排序謎題 ----
-function puzzleOrder(p) {
+function puzzleState(p) {
   if (!state.puzzles[p.id]) state.puzzles[p.id] = { order: [...p.start], hinted: false };
   return state.puzzles[p.id];
 }
 
-function isSolvedOrder(p, order) {
-  return order.every((id, i) => id === p.pieces[i].id);
+function checkSolved(p, ps) {
+  if (state.solved.includes(p.id) || !ps.order.every((id, i) => id === p.pieces[i].id)) return false;
+  state.solved.push(p.id);
+  state.line = STORY[state.node].lines.length; // 接著播放 solvedLines
+  logLine();
+  return true;
 }
 
-function finishIfSolved(p, ps) {
-  if (isSolvedOrder(p, ps.order) && !state.solved.includes(p.id)) state.solved.push(p.id);
+function afterPuzzleChange(p, ps) {
+  const solved = checkSolved(p, ps);
+  save();
+  if (solved) { renderLine(true); $('dialogue').focus({ preventScroll: true }); }
+  else renderControls();
 }
 
 function swapPiece(p, ps, index) {
-  const locked = ps.hinted ? 0 : -1;
-  if (index === locked) return;
-  if (selectedPiece === null) {
-    selectedPiece = index;
-  } else if (selectedPiece === index) {
-    selectedPiece = null;
-  } else {
+  if (ps.hinted && index === 0) return;
+  if (selectedPiece === null) selectedPiece = index;
+  else if (selectedPiece === index) selectedPiece = null;
+  else {
     [ps.order[selectedPiece], ps.order[index]] = [ps.order[index], ps.order[selectedPiece]];
     selectedPiece = null;
-    finishIfSolved(p, ps);
   }
-  save();
-  render();
+  afterPuzzleChange(p, ps);
 }
 
 function useHint(p, ps) {
-  const first = p.pieces[0].id;
-  const at = ps.order.indexOf(first);
+  const at = ps.order.indexOf(p.pieces[0].id);
   [ps.order[0], ps.order[at]] = [ps.order[at], ps.order[0]];
   ps.hinted = true;
   selectedPiece = null;
-  finishIfSolved(p, ps);
-  save();
-  render();
+  afterPuzzleChange(p, ps);
 }
 
 function renderPuzzle(p) {
-  const ps = puzzleOrder(p);
+  const ps = puzzleState(p);
   const box = el('div', 'puzzle');
   box.append(el('p', 'puzzle-prompt', p.prompt));
   const grid = el('div', 'mural');
@@ -131,7 +270,9 @@ function renderPuzzle(p) {
     b.setAttribute('aria-pressed', String(selectedPiece === i));
     if (fixed) { b.classList.add('fixed'); b.setAttribute('aria-disabled', 'true'); }
     b.setAttribute('aria-label', `第 ${i + 1} 塊石板：${piece.text}${fixed ? '（已固定）' : ''}`);
-    b.append(el('span', 'tablet-no', ['Ⅰ', 'Ⅱ', 'Ⅲ', 'Ⅳ'][i] || i + 1), el('span', null, piece.text));
+    b.append(el('span', 'tablet-no', ['Ⅰ', 'Ⅱ', 'Ⅲ', 'Ⅳ'][i] || i + 1));
+    if (piece.image) b.append(optionalImage(piece.image, 'tablet-img'));
+    b.append(el('span', 'tablet-text', piece.text));
     b.onclick = () => swapPiece(p, ps, i);
     grid.append(b);
   });
@@ -148,26 +289,39 @@ function renderPuzzle(p) {
 }
 
 // ---- 畫面 ----
-function render() {
+function renderLine(animate) {
   const node = STORY[state.node];
+  const line = asLine(currentLines()[state.line]);
+  const stage = stageAt(node, state.line);
+  setBackground(stage.bg);
+  setSprite(stage.sprite);
+
+  const speaker = $('speaker');
+  speaker.hidden = !line.who;
+  speaker.textContent = line.who || '';
+  $('dialogue').classList.toggle('narration', !line.who);
+
+  if (animate) typeText(line.text);
+  else { stopTyping(); $('line').textContent = line.text; }
+  renderControls();
+}
+
+function renderControls() {
+  const node = STORY[state.node];
+  const total = currentLines().length;
+  const end = atEnd();
+  const waiting = !!typing || !end;
+  $('progress').textContent = `${state.line + 1} / ${total}`;
+  $('next-mark').hidden = !waiting;
+  $('skip').disabled = end && !typing;
+  $('dialogue').setAttribute('aria-disabled', String(!waiting));
+
+  if (waiting) { $('choices').replaceChildren(); return; }
+
   const puzzle = node.puzzle;
-  const solved = puzzle && state.solved.includes(puzzle.id);
-
-  $('location').textContent = node.location;
-  $('chapter').textContent = node.chapter;
-  $('title').textContent = node.title;
-  $('title').tabIndex = -1;
-
-  const paragraphs = [...node.text, ...(solved ? node.solvedText || [] : [])];
-  $('text').replaceChildren(...paragraphs.map(t => el('p', null, t)));
-
-  $('trust').textContent = `${state.trust} / ${MAX_TRUST}`;
-  $('meter').style.width = (state.trust / MAX_TRUST * 100) + '%';
-  $('inventory').replaceChildren(...state.items.map(item => el('li', null, item)));
-
   const area = [];
   let choices;
-  if (puzzle && !solved) {
+  if (puzzle && !state.solved.includes(puzzle.id)) {
     area.push(renderPuzzle(puzzle));
     choices = node.giveUp || [];
   } else {
@@ -175,17 +329,74 @@ function render() {
   }
   area.push(...choices.map(choiceButton));
   $('choices').replaceChildren(...area);
-  save();
+}
+
+function renderJournal() {
+  $('trust').textContent = `${state.trust} / ${MAX_TRUST}`;
+  $('meter').style.width = (state.trust / MAX_TRUST * 100) + '%';
+  $('inventory').replaceChildren(...state.items.map(item => {
+    const li = el('li');
+    if (ITEMS[item]) li.append(optionalImage(`items/${ITEMS[item]}`, 'item-icon'));
+    li.append(el('span', null, item));
+    return li;
+  }));
+}
+
+function render(animate) {
+  const node = STORY[state.node];
+  $('location').textContent = node.location;
+  $('chapter').textContent = node.chapter;
+  $('title').textContent = node.title;
+  document.querySelector('.story').classList.toggle('is-ending', !!node.ending);
+  renderJournal();
+  renderLine(animate);
+}
+
+// ---- 對白紀錄 ----
+function openLog() {
+  stopTyping();
+  renderControls();
+  $('log-list').replaceChildren(...state.log.map(entry => {
+    const li = el('li', entry.choice ? 'log-choice' : null);
+    if (entry.choice) li.textContent = '▸ ' + entry.choice;
+    else {
+      if (entry.who) li.append(el('strong', null, entry.who));
+      li.append(el('span', null, entry.text));
+    }
+    return li;
+  }));
+  $('log').showModal();
+  const list = $('log-list');
+  list.scrollTop = list.scrollHeight;
 }
 
 function reset() {
   state = newState();
+  logLine();
   selectedPiece = null;
   save();
-  render();
+  render(true);
 }
 
+// ---- 事件 ----
+$('dialogue').onclick = advance;
+$('scene').onclick = advance;
+$('skip').onclick = skip;
+$('log-open').onclick = openLog;
+$('log-close').onclick = () => $('log').close();
+$('log').onclick = e => { if (e.target === $('log')) $('log').close(); };
 $('restart').onclick = () => {
   if (confirm('確定要重新開始嗎？目前的旅程進度將被清除。')) reset();
 };
-render();
+document.addEventListener('keydown', e => {
+  if ($('log').open || e.altKey || e.ctrlKey || e.metaKey) return;
+  if (e.key !== ' ' && e.key !== 'Enter') return;
+  const t = e.target;
+  if (t !== document.body && t !== $('dialogue')) return;
+  e.preventDefault();
+  advance();
+});
+
+state = loadState();
+save();
+render(false);
