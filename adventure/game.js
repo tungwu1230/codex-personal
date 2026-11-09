@@ -2,6 +2,9 @@ const SAVE_KEY = 'starlight-adventure-v3';
 const MAX_TRUST = 2;
 const MAX_LOG = 300;
 const TYPE_SPEED = 32; // 每個字的毫秒數
+const AUTO_DELAY = 1200; // 自動播放：每句停留的基本毫秒數
+const AUTO_PER_CHAR = 45; // 自動播放：每個字額外停留的毫秒數
+const CARD_TIME = 1700; // 章節標題卡顯示的毫秒數
 const FALLBACK_BG = '../assets/starlight.png';
 const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const $ = id => document.getElementById(id);
@@ -34,6 +37,9 @@ function save() {
 let state;
 let typing = null; // { timer, text }
 let selectedPiece = null;
+let auto = false;
+let autoTimer = null;
+let card = null; // { timer, then }
 
 // ---- 台詞 ----
 function asLine(raw) {
@@ -96,7 +102,7 @@ function setBackground(bg) {
   const src = bg ? asset(bg) : null;
   (src ? probe(src) : Promise.resolve(false)).then(ok => {
     if (token !== bgToken) return;
-    $('scene-bg').style.backgroundImage = `url('${ok ? src : FALLBACK_BG}')`;
+    document.documentElement.style.setProperty('--bg-image', `url('${ok ? src : FALLBACK_BG}')`);
   });
 }
 
@@ -149,8 +155,64 @@ function typeText(text) {
   };
 }
 
+// ---- 自動播放 ----
+function clearAuto() {
+  clearTimeout(autoTimer);
+  autoTimer = null;
+}
+
+function scheduleAuto() {
+  clearAuto();
+  if (!auto || typing || card || atEnd() || document.querySelector('dialog[open]')) return;
+  const text = asLine(currentLines()[state.line]).text;
+  autoTimer = setTimeout(advance, AUTO_DELAY + text.length * AUTO_PER_CHAR);
+}
+
+function setAuto(on) {
+  auto = on;
+  $('auto').setAttribute('aria-pressed', String(on));
+  if (on) scheduleAuto(); else clearAuto();
+}
+
+// ---- 章節標題卡 ----
+function showCard(node, then) {
+  hideCard(false);
+  $('card-chapter').textContent = node.chapter;
+  $('title').textContent = node.title;
+  const box = $('chapter-card');
+  box.classList.remove('leaving');
+  box.hidden = false;
+  card = { then, timer: setTimeout(() => hideCard(true), CARD_TIME) };
+}
+
+function hideCard(run) {
+  if (!card) return;
+  const { timer, then } = card;
+  clearTimeout(timer);
+  card = null;
+  const box = $('chapter-card');
+  if (REDUCED_MOTION || !run) box.hidden = true;
+  else {
+    box.classList.add('leaving');
+    setTimeout(() => { if (!card) box.hidden = true; }, 400);
+  }
+  if (run) then();
+}
+
+// ---- 獲得道具提示 ----
+let toastTimer = null;
+function toast(text) {
+  const t = $('toast');
+  clearTimeout(toastTimer);
+  t.textContent = text;
+  t.hidden = false;
+  toastTimer = setTimeout(() => { t.hidden = true; }, 2600);
+}
+
 // ---- 推進 ----
 function advance() {
+  clearAuto();
+  if (card) { hideCard(true); return; }
   if (typing) { stopTyping(); renderControls(); return; }
   if (atEnd()) return;
   state.line++;
@@ -160,6 +222,8 @@ function advance() {
 }
 
 function skip() {
+  clearAuto();
+  if (card) hideCard(true);
   stopTyping();
   const last = currentLines().length - 1;
   while (state.line < last) { state.line++; logLine(); }
@@ -205,7 +269,10 @@ function choiceButton(choice, index) {
 function choose(choice) {
   if (choice.restart) { reset(); return; }
   state.log.push({ choice: choice.label });
-  if (choice.item && !state.items.includes(choice.item)) state.items.push(choice.item);
+  if (choice.item && !state.items.includes(choice.item)) {
+    state.items.push(choice.item);
+    toast(`◇ 獲得道具：${choice.item}`);
+  }
   state.trust = Math.min(MAX_TRUST, state.trust + (choice.trust || 0));
   state.node = choice.next;
   state.line = 0;
@@ -214,8 +281,6 @@ function choose(choice) {
   save();
   render(true);
   $('dialogue').focus({ preventScroll: true });
-  const target = matchMedia('(max-width:800px)').matches ? '.story' : '.story-body';
-  document.querySelector(target).scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ---- 排序謎題 ----
@@ -316,7 +381,12 @@ function renderControls() {
   $('skip').disabled = end && !typing;
   $('dialogue').setAttribute('aria-disabled', String(!waiting));
 
-  if (waiting) { $('choices').replaceChildren(); return; }
+  if (waiting) {
+    $('choices').replaceChildren();
+    $('stage').classList.remove('choosing');
+    scheduleAuto();
+    return;
+  }
 
   const puzzle = node.puzzle;
   const area = [];
@@ -329,6 +399,8 @@ function renderControls() {
   }
   area.push(...choices.map(choiceButton));
   $('choices').replaceChildren(...area);
+  $('choices').scrollTop = 0;
+  $('stage').classList.add('choosing');
 }
 
 function renderJournal() {
@@ -342,18 +414,34 @@ function renderJournal() {
   }));
 }
 
+// animate 為 true 時（進入新段落）先顯示章節標題卡，再開始逐字演出
 function render(animate) {
   const node = STORY[state.node];
   $('location').textContent = node.location;
   $('chapter').textContent = node.chapter;
-  $('title').textContent = node.title;
-  document.querySelector('.story').classList.toggle('is-ending', !!node.ending);
+  $('stage').classList.toggle('is-ending', !!node.ending);
   renderJournal();
-  renderLine(animate);
+  if (!animate) { hideCard(false); renderLine(false); return; }
+  // 先換好背景與立繪，標題卡淡出時畫面已就緒
+  const stage = stageAt(node, state.line);
+  setBackground(stage.bg);
+  setSprite(stage.sprite);
+  stopTyping();
+  $('line').textContent = '';
+  $('speaker').hidden = true;
+  $('choices').replaceChildren();
+  $('stage').classList.remove('choosing');
+  showCard(node, () => renderLine(true));
 }
 
 // ---- 對白紀錄 ----
+function openSheet(id) {
+  clearAuto();
+  $(id).showModal();
+}
+
 function openLog() {
+  if (card) hideCard(true);
   stopTyping();
   renderControls();
   $('log-list').replaceChildren(...state.log.map(entry => {
@@ -365,12 +453,13 @@ function openLog() {
     }
     return li;
   }));
-  $('log').showModal();
+  openSheet('log');
   const list = $('log-list');
   list.scrollTop = list.scrollHeight;
 }
 
 function reset() {
+  setAuto(false);
   state = newState();
   logLine();
   selectedPiece = null;
@@ -381,15 +470,30 @@ function reset() {
 // ---- 事件 ----
 $('dialogue').onclick = advance;
 $('scene').onclick = advance;
+$('chapter-card').onclick = advance;
 $('skip').onclick = skip;
+$('auto').onclick = () => setAuto(!auto);
 $('log-open').onclick = openLog;
-$('log-close').onclick = () => $('log').close();
-$('log').onclick = e => { if (e.target === $('log')) $('log').close(); };
+$('journal-open').onclick = () => openSheet('journal');
+$('menu-open').onclick = () => openSheet('menu');
+document.querySelectorAll('dialog').forEach(d => {
+  d.querySelector('[data-close]').onclick = () => d.close();
+  d.onclick = e => { if (e.target === d) d.close(); }; // 點擊面板外側關閉
+  d.addEventListener('close', scheduleAuto);
+});
 $('restart').onclick = () => {
-  if (confirm('確定要重新開始嗎？目前的旅程進度將被清除。')) reset();
+  if (confirm('確定要重新開始嗎？目前的旅程進度將被清除。')) { $('menu').close(); reset(); }
 };
+if (document.fullscreenEnabled) {
+  $('fullscreen').hidden = false;
+  $('fullscreen').onclick = () => {
+    $('menu').close();
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().catch(() => {});
+  };
+}
 document.addEventListener('keydown', e => {
-  if ($('log').open || e.altKey || e.ctrlKey || e.metaKey) return;
+  if (document.querySelector('dialog[open]') || e.altKey || e.ctrlKey || e.metaKey) return;
   if (e.key !== ' ' && e.key !== 'Enter') return;
   const t = e.target;
   if (t !== document.body && t !== $('dialogue')) return;
@@ -399,4 +503,4 @@ document.addEventListener('keydown', e => {
 
 state = loadState();
 save();
-render(false);
+render(state.line === 0 && state.log.length <= 1);
