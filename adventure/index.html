@@ -22,8 +22,10 @@
         <strong><span aria-hidden="true">✦</span> <span id="location"></span></strong>
       </div>
       <div class="hud-actions">
-        <button class="hud-button" id="journal-open" aria-label="旅人的手札"><i aria-hidden="true">◇</i>手札</button>
-        <button class="hud-button" id="menu-open" aria-label="選單"><i aria-hidden="true">☰</i>選單</button>
+        <button class="hud-button" id="journal-open" aria-label="旅人的手札">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6.5C10 5 7 4.5 4 5v13c3-.5 6 0 8 1.5 2-1.5 5-2 8-1.5V5c-3-.5-6 0-8 1.5zM12 6.5v13"/></svg>手札</button>
+        <button class="hud-button" id="menu-open" aria-label="選單">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14"/></svg>選單</button>
       </div>
     </header>
 
@@ -52,31 +54,43 @@
     <div class="toast" id="toast" role="status" hidden></div>
   </main>
 
-  <dialog id="journal" class="sheet">
-    <div class="sheet-head">
-      <div><small>TRAVELER'S JOURNAL</small><h2>旅人的手札</h2></div>
-      <button class="text-button" data-close>關閉 ✕</button>
-    </div>
-    <div class="sheet-body">
-      <p class="stat-label">✧ 信任 <span id="trust"></span></p>
-      <div class="meter"><i id="meter"></i></div>
-      <p class="hint">你與這片土地建立的連結</p>
-      <p class="stat-label">◇ 旅途行囊</p>
+  <dialog id="journal" class="card journal">
+    <i class="corner tl" aria-hidden="true"></i><i class="corner tr" aria-hidden="true"></i>
+    <i class="corner bl" aria-hidden="true"></i><i class="corner br" aria-hidden="true"></i>
+    <button class="card-close" data-close aria-label="關閉">✕</button>
+    <header class="journal-head">
+      <small>Traveler's Journal</small>
+      <h2>旅人的手札</h2>
+    </header>
+    <section class="journal-section">
+      <h3>信任 <span id="trust"></span></h3>
+      <div class="trust-lamps" id="trust-lamps" aria-hidden="true"></div>
+      <p class="journal-note">你與這片土地建立的連結</p>
+    </section>
+    <section class="journal-section">
+      <h3>旅途行囊 <span id="item-count"></span></h3>
       <ul id="inventory" class="inventory"></ul>
-    </div>
+    </section>
   </dialog>
 
-  <dialog id="menu" class="sheet">
-    <div class="sheet-head">
-      <div><small>MENU</small><h2>選單</h2></div>
-      <button class="text-button" data-close>關閉 ✕</button>
+  <dialog id="menu" class="card menu">
+    <i class="corner tl" aria-hidden="true"></i><i class="corner tr" aria-hidden="true"></i>
+    <i class="corner bl" aria-hidden="true"></i><i class="corner br" aria-hidden="true"></i>
+    <button class="card-close" data-close aria-label="關閉">✕</button>
+    <header class="menu-head">
+      <small>Menu</small>
+      <h2>選單</h2>
+    </header>
+    <div class="menu-list">
+      <button class="menu-item" id="fullscreen" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>全螢幕</button>
+      <a class="menu-item" href="../">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6l-6 6 6 6M4 12h16"/></svg>返回作品集</a>
+      <hr class="menu-rule">
+      <button class="menu-item danger" id="restart">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.6-5.9M4 4v5h5"/></svg>重新開始</button>
     </div>
-    <div class="sheet-body menu-list">
-      <button class="menu-item" id="fullscreen" hidden>全螢幕 ⛶</button>
-      <button class="menu-item" id="restart">重新開始 ↺</button>
-      <a class="menu-item" href="../">返回作品集 ↗</a>
-      <p class="hint">點擊畫面或按空白鍵繼續。旅程會自動保存在此瀏覽器。</p>
-    </div>
+    <p class="menu-note">點擊畫面或按空白鍵繼續<br>旅程會自動保存在此瀏覽器</p>
   </dialog>
 
   <dialog id="log" class="sheet log">

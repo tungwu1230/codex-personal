@@ -405,11 +405,21 @@ function renderControls() {
 
 function renderJournal() {
   $('trust').textContent = `${state.trust} / ${MAX_TRUST}`;
-  $('meter').style.width = (state.trust / MAX_TRUST * 100) + '%';
-  $('inventory').replaceChildren(...state.items.map(item => {
-    const li = el('li');
-    if (ITEMS[item]) li.append(optionalImage(`items/${ITEMS[item]}`, 'item-icon'));
-    li.append(el('span', null, item));
+  $('trust-lamps').replaceChildren(...Array.from({ length: MAX_TRUST }, (_, i) =>
+    el('i', 'trust-lamp' + (i < state.trust ? ' on' : ''))));
+  // 已取得的在前；未取得的只顯示空格，不透露名稱
+  const all = Object.keys(ITEMS);
+  const owned = [...state.items, ...all.filter(i => !state.items.includes(i))];
+  $('item-count').textContent = `${state.items.length} / ${Math.max(all.length, state.items.length)}`;
+  $('inventory').replaceChildren(...owned.map(item => {
+    const has = state.items.includes(item);
+    const li = el('li', has ? null : 'empty');
+    const slot = el('div', 'item-slot');
+    if (has) {
+      if (ITEMS[item]) slot.append(optionalImage(`items/${ITEMS[item]}`, 'item-icon'));
+      slot.append(el('span', 'item-initial', item[0]));
+    } else slot.textContent = '？';
+    li.append(slot, el('span', null, has ? item : '尚未取得'));
     return li;
   }));
 }
@@ -499,6 +509,10 @@ document.addEventListener('keydown', e => {
   if (t !== document.body && t !== $('dialogue')) return;
   e.preventDefault();
   advance();
+});
+
+Promise.all([probe(asset('ui/trust-on')), probe(asset('ui/trust-off'))]).then(ok => {
+  $('journal').classList.toggle('has-lamps', ok.every(Boolean));
 });
 
 state = loadState();
